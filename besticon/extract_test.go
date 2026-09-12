@@ -65,6 +65,29 @@ func TestDetermineBaseURL(t *testing.T) {
 	}
 }
 
+func TestResolveURLReference(t *testing.T) {
+	baseURL, err := url.Parse("http://example.com/ui/app/")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := map[string]string{
+		"favicon.ico":                     "http://example.com/ui/app/favicon.ico",
+		"../favicon.ico":                  "http://example.com/ui/favicon.ico",
+		"//cdn.example.com/favicon.ico":   "http://cdn.example.com/favicon.ico",
+		"https://example.org/favicon.ico": "https://example.org/favicon.ico",
+	}
+	for reference, expected := range tests {
+		actual, err := resolveURLReference(baseURL, reference)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if actual != expected {
+			t.Errorf("resolveURLReference(%q) = %q, want %q", reference, actual, expected)
+		}
+	}
+}
+
 func TestLinkExtraction(t *testing.T) {
 	// invalid links
 	invalid := []string{

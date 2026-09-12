@@ -417,16 +417,20 @@ func isSVG(body []byte) bool {
 }
 
 func absoluteURL(baseURL *url.URL, path string) (string, error) {
-	reference, err := url.Parse(path)
-	if err != nil {
-		return "", err
+	u, e := url.Parse(path)
+	if e != nil {
+		return "", e
 	}
 
-	base := *baseURL
-	if base.Scheme == "" {
-		base.Scheme = "http"
+	u.Scheme = baseURL.Scheme
+	if u.Scheme == "" {
+		u.Scheme = "http"
 	}
-	return base.ResolveReference(reference).String(), nil
+
+	if u.Host == "" {
+		u.Host = baseURL.Host
+	}
+	return baseURL.ResolveReference(u).String(), nil
 }
 
 func urlFromBase(baseURL *url.URL, path string) string {

@@ -52,7 +52,7 @@ func findIconLinks(siteURL *url.URL, html []byte) ([]string, error) {
 	// actually a document.
 	directoryURL := pageDirectoryURL(baseURL)
 	for _, path := range iconPaths {
-		absoluteURL, e := absoluteURL(directoryURL, strings.TrimPrefix(path, "/"))
+		absoluteURL, e := resolveURLReference(directoryURL, strings.TrimPrefix(path, "/"))
 		if e == nil {
 			links[absoluteURL] = empty{}
 		}
@@ -82,6 +82,18 @@ func pageDirectoryURL(baseURL *url.URL) *url.URL {
 		u.Path += "/"
 	}
 	return &u
+}
+
+func resolveURLReference(baseURL *url.URL, reference string) (string, error) {
+	referenceURL, err := url.Parse(reference)
+	if err != nil {
+		return "", err
+	}
+	base := *baseURL
+	if base.Scheme == "" {
+		base.Scheme = "http"
+	}
+	return base.ResolveReference(referenceURL).String(), nil
 }
 
 // What is the baseURL for this doc?

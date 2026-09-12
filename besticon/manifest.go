@@ -27,7 +27,7 @@ func findManifestLinks(siteURL *url.URL, html []byte) ([]string, error) {
 	baseURL := determineBaseURL(siteURL, doc)
 	links := make(map[string]empty)
 	for _, href := range extractManifestTags(doc) {
-		absoluteURL, err := absoluteURL(baseURL, href)
+		absoluteURL, err := resolveURLReference(baseURL, href)
 		if err == nil {
 			links[absoluteURL] = empty{}
 		}
@@ -93,7 +93,7 @@ func (b *Besticon) fetchManifestIconLinks(manifestURL string) []string {
 		if icon.Src == "" {
 			continue
 		}
-		absoluteURL, err := absoluteURL(baseURL, icon.Src)
+		absoluteURL, err := resolveURLReference(baseURL, icon.Src)
 		if err == nil {
 			links = append(links, absoluteURL)
 		}
