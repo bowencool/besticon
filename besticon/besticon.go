@@ -39,6 +39,8 @@ type Besticon struct {
 	defaultFormats      []string
 	discardImageBytes   bool
 	maxResponseBodySize int64
+
+	privateNetworkProtectionDisabled bool
 }
 
 // New returns a new Besticon instance.
@@ -58,7 +60,11 @@ func New(opts ...Option) *Besticon {
 	}
 
 	if b.httpClient == nil {
-		b.httpClient = NewDefaultHTTPClient()
+		if b.privateNetworkProtectionDisabled {
+			b.httpClient = NewUnsafeHTTPClient(defaultUserAgent)
+		} else {
+			b.httpClient = NewDefaultHTTPClient()
+		}
 	}
 
 	if b.logger == nil {

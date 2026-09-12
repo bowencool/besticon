@@ -249,6 +249,41 @@ func TestGetRejectsDirectPrivateHost(t *testing.T) {
 	}
 }
 
+func TestGetAllowsPrivateHostWhenProtectionDisabled(t *testing.T) {
+	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("INTERNAL"))
+	}))
+	defer internal.Close()
+
+	b := New(WithPrivateNetworkProtectionDisabled())
+
+	resp, err := b.Get(internal.URL + "/favicon.ico")
+	if err != nil {
+		t.Fatalf("expected private request to be allowed, got: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestUnsafeTransportAllowsPrivateAddr(t *testing.T) {
+	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer internal.Close()
+
+	client := &http.Client{Transport: NewUnsafeHTTPTransport("test-agent")}
+	resp, err := client.Get(internal.URL)
+	if err != nil {
+		t.Fatalf("expected unsafe transport to allow private address, got: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+}
+
 // TestCheckRedirectRejectsPrivateTarget exercises the redirect guard that
 // NewDefaultHTTPClient installs.
 //

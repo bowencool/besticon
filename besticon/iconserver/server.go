@@ -311,8 +311,16 @@ func startServer(port string, address string) {
 		panic(err)
 	}
 
-	httpClient := besticon.NewDefaultHTTPClient()
-	httpClient.Transport = besticon.NewDefaultHTTPTransport(getenvOrFallback("HTTP_USER_AGENT", "Mozilla/5.0 (iPhone; CPU iPhone OS 10_0 like Mac OS X) AppleWebKit/602.1.38 (KHTML, like Gecko) Version/10.0 Mobile/14A5297c Safari/602.1"))
+	userAgent := getenvOrFallback("HTTP_USER_AGENT", "Mozilla/5.0 (iPhone; CPU iPhone OS 10_0 like Mac OS X) AppleWebKit/602.1.38 (KHTML, like Gecko) Version/10.0 Mobile/14A5297c Safari/602.1")
+	var httpClient *http.Client
+	if getTrueFromEnv("DISABLE_PRIVATE_NETWORK_PROTECTION") {
+		logger.Print("WARNING: private network protection is disabled; untrusted callers can make requests to internal services")
+		httpClient = besticon.NewUnsafeHTTPClient(userAgent)
+		opts = append(opts, besticon.WithPrivateNetworkProtectionDisabled())
+	} else {
+		httpClient = besticon.NewDefaultHTTPClient()
+		httpClient.Transport = besticon.NewDefaultHTTPTransport(userAgent)
+	}
 
 	opts = append(opts, besticon.WithHTTPClient(httpClient))
 

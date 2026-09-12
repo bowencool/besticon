@@ -3,7 +3,7 @@
 
 # Use the official Golang image to create a build artifact.
 # https://hub.docker.com/_/golang
-FROM golang:1.26 as builder
+FROM golang:1.26 AS builder
 
 # Copy local code to the container image.
 WORKDIR /app
@@ -39,6 +39,7 @@ ENV CORS_ALLOWED_METHODS=''
 ENV CORS_ALLOWED_ORIGINS=''
 ENV CORS_ALLOW_CREDENTIALS=''
 ENV CORS_DEBUG=''
+ENV DISABLE_PRIVATE_NETWORK_PROTECTION=false
 ENV HOST_ONLY_DOMAINS=*
 ENV HTTP_CLIENT_TIMEOUT=5s
 ENV HTTP_MAX_AGE_DURATION=720h
@@ -49,7 +50,7 @@ ENV SERVER_MODE=redirect
 ARG VERSION=''
 ARG REVISION=''
 
-LABEL org.opencontainers.image.source="https://github.com/mat/besticon"
+LABEL org.opencontainers.image.source="https://github.com/bowencool/besticon"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.revision="${REVISION}"

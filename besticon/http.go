@@ -18,6 +18,8 @@ import (
 
 var _ http.RoundTripper = (*httpTransport)(nil)
 
+const defaultUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 10_0 like Mac OS X) AppleWebKit/602.1.38 (KHTML, like Gecko) Version/10.0 Mobile/14A5297c Safari/602.1"
+
 type httpTransport struct {
 	transport http.RoundTripper
 
@@ -33,6 +35,16 @@ func (h *httpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func NewDefaultHTTPTransport(userAgent string) http.RoundTripper {
 	return &httpTransport{
 		transport: safeTransport,
+		userAgent: userAgent,
+	}
+}
+
+// NewUnsafeHTTPTransport returns a transport that permits private and reserved
+// destination addresses. It still ignores proxy environment variables so the
+// destination is contacted directly.
+func NewUnsafeHTTPTransport(userAgent string) http.RoundTripper {
+	return &httpTransport{
+		transport: newBaseTransport(),
 		userAgent: userAgent,
 	}
 }
@@ -55,18 +67,24 @@ func NewDefaultHTTPTransport(userAgent string) http.RoundTripper {
 var safeTransport http.RoundTripper = newSafeTransport()
 
 func newSafeTransport() *http.Transport {
-	t := http.DefaultTransport.(*http.Transport).Clone()
-
-	// Deliberately no proxy. With a proxy configured the dialer connects to
-	// the proxy, so Control would validate the proxy's address and never see
-	// the real target — the SSRF filter would pass everything.
-	t.Proxy = nil
+	t := newBaseTransport()
 
 	t.DialContext = (&net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
 		Control:   controlBlockPrivateAddr,
 	}).DialContext
+
+	return t
+}
+
+func newBaseTransport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+
+	// Deliberately no proxy. With a proxy configured the dialer connects to
+	// the proxy, so Control would validate the proxy's address and never see
+	// the real target — the SSRF filter would pass everything.
+	t.Proxy = nil
 
 	return t
 }
@@ -90,7 +108,7 @@ func NewDefaultHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout:   5 * time.Second,
 		Jar:       mustInitCookieJar(),
-		Transport: NewDefaultHTTPTransport("Mozilla/5.0 (iPhone; CPU iPhone OS 10_0 like Mac OS X) AppleWebKit/602.1.38 (KHTML, like Gecko) Version/10.0 Mobile/14A5297c Safari/602.1"),
+		Transport: NewDefaultHTTPTransport(defaultUserAgent),
 		// Re-validate the target of every redirect hop. Without this, the
 		// initial-host check in Get only covers the first request: a public
 		// host could 302 to a private/loopback/link-local address and the
@@ -101,6 +119,16 @@ func NewDefaultHTTPClient() *http.Client {
 			}
 			return checkPublicHost(req.URL.Hostname())
 		},
+	}
+}
+
+// NewUnsafeHTTPClient returns a client that permits private and reserved
+// destination addresses, including on redirect hops.
+func NewUnsafeHTTPClient(userAgent string) *http.Client {
+	return &http.Client{
+		Timeout:   5 * time.Second,
+		Jar:       mustInitCookieJar(),
+		Transport: NewUnsafeHTTPTransport(userAgent),
 	}
 }
 
@@ -116,8 +144,10 @@ func (b *Besticon) Get(urlstring string) (*http.Response, error) {
 		return nil, e
 	}
 
-	if e := checkPublicHost(u.Hostname()); e != nil {
-		return nil, e
+	if !b.privateNetworkProtectionDisabled {
+		if e := checkPublicHost(u.Hostname()); e != nil {
+			return nil, e
+		}
 	}
 
 	req, e := http.NewRequest("GET", u.String(), nil)

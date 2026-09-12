@@ -67,3 +67,16 @@ func WithDiscardImageBytes(discardImageBytes bool) Option {
 		discardImageBytes: discardImageBytes,
 	}
 }
+
+type privateNetworkProtectionDisabledOption struct{}
+
+func (o *privateNetworkProtectionDisabledOption) applyOption(b *Besticon) {
+	b.privateNetworkProtectionDisabled = true
+}
+
+// WithPrivateNetworkProtectionDisabled permits requests to private and
+// reserved network addresses. Only use this for trusted, self-hosted
+// deployments because callers can otherwise use Besticon as an SSRF proxy.
+func WithPrivateNetworkProtectionDisabled() Option {
+	return &privateNetworkProtectionDisabledOption{}
+}
