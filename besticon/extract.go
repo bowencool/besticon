@@ -45,6 +45,19 @@ func findIconLinks(siteURL *url.URL, html []byte) ([]string, error) {
 		links[urlFromBase(baseURL, path)] = empty{}
 	}
 
+	// Apps mounted below the origin root often keep their favicon beside the
+	// page (for example /ui/app/favicon.ico). Probe that directory as well as
+	// the traditional root paths. Treat a path without a trailing slash as an
+	// application directory too; the extra candidates are harmless when it is
+	// actually a document.
+	directoryURL := pageDirectoryURL(baseURL)
+	for _, path := range iconPaths {
+		absoluteURL, e := absoluteURL(directoryURL, strings.TrimPrefix(path, "/"))
+		if e == nil {
+			links[absoluteURL] = empty{}
+		}
+	}
+
 	// Add icons found in page
 	urls := extractIconTags(doc)
 	for _, u := range urls {
@@ -58,21 +71,31 @@ func findIconLinks(siteURL *url.URL, html []byte) ([]string, error) {
 	return slices.Sorted(maps.Keys(links)), nil
 }
 
+func pageDirectoryURL(baseURL *url.URL) *url.URL {
+	u := *baseURL
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	if u.Path == "" {
+		u.Path = "/"
+	} else if !strings.HasSuffix(u.Path, "/") {
+		u.Path += "/"
+	}
+	return &u
+}
+
 // What is the baseURL for this doc?
 func determineBaseURL(siteURL *url.URL, doc *goquery.Document) *url.URL {
 	baseTagHref := extractBaseTag(doc)
-	if baseTagHref != "" {
-		if strings.HasPrefix(baseTagHref, "/") {
-			return siteURL.JoinPath(baseTagHref)
-		}
-		baseTagURL, e := url.Parse(baseTagHref)
-		if e != nil {
-			return siteURL
-		}
-		return baseTagURL
+	if baseTagHref == "" {
+		return siteURL
 	}
 
-	return siteURL
+	baseTagURL, err := url.Parse(baseTagHref)
+	if err != nil {
+		return siteURL
+	}
+	return siteURL.ResolveReference(baseTagURL)
 }
 
 // Convert bytes => doc

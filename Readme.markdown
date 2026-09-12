@@ -3,6 +3,7 @@
 This is a favicon service:
 
 - Supports `favicon.ico` and `apple-touch-icon.png`
+- Discovers icons for path-mounted apps and from Web App Manifests
 - Simple URL API
 - Fallback icon generation
 - Docker image & single binary download for [easy hosting](#hosting)

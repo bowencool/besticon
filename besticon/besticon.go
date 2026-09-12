@@ -218,6 +218,7 @@ func (b *Besticon) fetchIcons(siteURL string) ([]Icon, error) {
 		if e != nil {
 			return nil, e
 		}
+		links = uniqueLinks(links, b.findManifestIconLinks(urlAfterRedirect, html))
 	} else {
 		// Unable to fetch the response or got a bad HTTP status code. Try default
 		// icon paths. https://github.com/mat/besticon/discussions/47
@@ -416,25 +417,24 @@ func isSVG(body []byte) bool {
 }
 
 func absoluteURL(baseURL *url.URL, path string) (string, error) {
-	u, e := url.Parse(path)
-	if e != nil {
-		return "", e
+	reference, err := url.Parse(path)
+	if err != nil {
+		return "", err
 	}
 
-	u.Scheme = baseURL.Scheme
-	if u.Scheme == "" {
-		u.Scheme = "http"
+	base := *baseURL
+	if base.Scheme == "" {
+		base.Scheme = "http"
 	}
-
-	if u.Host == "" {
-		u.Host = baseURL.Host
-	}
-	return baseURL.ResolveReference(u).String(), nil
+	return base.ResolveReference(reference).String(), nil
 }
 
 func urlFromBase(baseURL *url.URL, path string) string {
 	u := *baseURL
 	u.Path = path
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
 	if u.Scheme == "" {
 		u.Scheme = "http"
 	}

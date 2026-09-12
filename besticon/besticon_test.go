@@ -293,11 +293,21 @@ func TestParseSize(t *testing.T) {
 }
 
 func TestAbsoluteURL(t *testing.T) {
-	baseURL, e := url.Parse("http://car2go.com")
+	baseURL, e := url.Parse("http://car2go.com/ui/app/")
 	check(e)
-	u, e := absoluteURL(baseURL, "/../../media/favicon.ico")
-	check(e)
-	assertEquals(t, "http://car2go.com/media/favicon.ico", u)
+
+	tests := map[string]string{
+		"/../../media/favicon.ico":        "http://car2go.com/media/favicon.ico",
+		"favicon.ico":                     "http://car2go.com/ui/app/favicon.ico",
+		"../favicon.ico":                  "http://car2go.com/ui/favicon.ico",
+		"//cdn.example.com/favicon.ico":   "http://cdn.example.com/favicon.ico",
+		"https://example.com/favicon.ico": "https://example.com/favicon.ico",
+	}
+	for reference, expected := range tests {
+		u, e := absoluteURL(baseURL, reference)
+		check(e)
+		assertEquals(t, expected, u)
+	}
 }
 
 func TestIsSVG(t *testing.T) {

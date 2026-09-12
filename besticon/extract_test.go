@@ -1,7 +1,10 @@
 package besticon
 
 import (
+	"net/url"
+	"slices"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -11,6 +14,55 @@ func mustFindIconLinks(html []byte) []string {
 	links := extractIconTags(doc)
 	sort.Strings(links)
 	return links
+}
+
+func TestFindIconLinksIncludesPageDirectoryDefaults(t *testing.T) {
+	siteURL, err := url.Parse("http://10.7.21.1:4965/ui/zashboard/#/proxies")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	links, err := findIconLinks(siteURL, []byte("<html><head></head></html>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, expected := range []string{
+		"http://10.7.21.1:4965/favicon.ico",
+		"http://10.7.21.1:4965/ui/zashboard/favicon.ico",
+	} {
+		if !slices.Contains(links, expected) {
+			t.Errorf("findIconLinks() = %v, want it to contain %q", links, expected)
+		}
+	}
+	for _, link := range links {
+		if strings.Contains(link, "#") {
+			t.Errorf("findIconLinks() returned URL with fragment: %q", link)
+		}
+	}
+}
+
+func TestDetermineBaseURL(t *testing.T) {
+	siteURL, err := url.Parse("http://example.com/ui/app/")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := map[string]string{
+		"//cdn.example.com/assets/":      "http://cdn.example.com/assets/",
+		"/assets/":                       "http://example.com/assets/",
+		"assets/":                        "http://example.com/ui/app/assets/",
+		"https://cdn.example.com/icons/": "https://cdn.example.com/icons/",
+	}
+	for href, expected := range tests {
+		doc, err := docFromHTML([]byte("<html><head><base href=\"" + href + "\"></head></html>"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if actual := determineBaseURL(siteURL, doc).String(); actual != expected {
+			t.Errorf("determineBaseURL(%q) = %q, want %q", href, actual, expected)
+		}
+	}
 }
 
 func TestLinkExtraction(t *testing.T) {
