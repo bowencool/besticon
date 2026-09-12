@@ -28,10 +28,11 @@ import (
 )
 
 type server struct {
-	maxIconSize     int
-	cacheDuration   time.Duration
-	demoSites       []string
-	hostOnlyDomains []string
+	maxIconSize                int
+	cacheDuration              time.Duration
+	demoSites                  []string
+	hostOnlyDomains            []string
+	googleDefaultFaviconSHA256 string
 
 	besticon *besticon.Besticon
 }
@@ -116,6 +117,11 @@ func (s *server) iconHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if googleIconURL, googleIconData, ok := s.fetchGoogleFavicon(url, sizeRange.Perfect); ok {
+		s.returnFetchedIcon(w, r, googleIconURL, googleIconData)
+		return
+	}
+
 	if getTrueFromEnv("DISABLE_LETTER_FALLBACK") {
 		addCacheControl(w, s.cacheDuration)
 		w.WriteHeader(http.StatusNoContent)
@@ -139,7 +145,7 @@ func (s *server) iconHandler(w http.ResponseWriter, r *http.Request) {
 		format = "svg"
 	}
 	redirectPath := lettericon.IconPath(letter, fmt.Sprintf("%d", sizeRange.Perfect), iconColor, format)
-	s.redirectWithCacheControl(w, r, redirectPath)
+	s.returnLetterIcon(w, r, redirectPath)
 }
 
 const (
@@ -403,6 +409,29 @@ func (s *server) returnIcon(w http.ResponseWriter, r *http.Request, iconURL stri
 	} else {
 		s.redirectWithCacheControl(w, r, iconURL)
 	}
+}
+
+func (s *server) returnFetchedIcon(w http.ResponseWriter, r *http.Request, iconURL string, data []byte) {
+	if os.Getenv("SERVER_MODE") != "download" {
+		s.redirectWithCacheControl(w, r, iconURL)
+		return
+	}
+
+	addCacheControl(w, s.cacheDuration)
+	w.Header().Set(contentType, http.DetectContentType(data))
+	_, _ = w.Write(data)
+}
+
+func (s *server) returnLetterIcon(w http.ResponseWriter, r *http.Request, iconPath string) {
+	if os.Getenv("SERVER_MODE") != "download" {
+		s.redirectWithCacheControl(w, r, iconPath)
+		return
+	}
+
+	letterRequest := r.Clone(r.Context())
+	letterRequest.URL.Path = iconPath
+	letterRequest.URL.RawQuery = ""
+	s.lettericonHandler(w, letterRequest)
 }
 
 func (s *server) downloadAndReturn(w http.ResponseWriter, r *http.Request, iconURL string) {
