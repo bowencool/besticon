@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"image"
+	"image/draw"
+	"image/png"
 	"io"
 	"io/fs"
 	"net/http"
@@ -25,6 +28,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
+	xdraw "golang.org/x/image/draw"
 )
 
 type server struct {
@@ -109,6 +113,17 @@ func (s *server) iconHandler(w http.ResponseWriter, r *http.Request) {
 	if icon != nil {
 		s.returnIcon(w, r, icon.URL)
 		return
+	}
+
+	// Redirect mode cannot resize an upstream icon. In download mode, use the
+	// smallest otherwise suitable raster icon above Max and shrink it to Max.
+	// Icons already inside the requested range keep the existing fast path and
+	// are returned byte-for-byte without decoding or re-encoding.
+	if os.Getenv("SERVER_MODE") == "download" {
+		oversizedIcon := smallestOversizedIcon(finder.Icons(), *sizeRange)
+		if oversizedIcon != nil && s.returnResizedIcon(w, oversizedIcon, sizeRange.Max) {
+			return
+		}
 	}
 
 	fallbackIconURL := r.FormValue("fallback_icon_url")
@@ -420,6 +435,96 @@ func (s *server) returnFetchedIcon(w http.ResponseWriter, r *http.Request, iconU
 	addCacheControl(w, s.cacheDuration)
 	w.Header().Set(contentType, http.DetectContentType(data))
 	_, _ = w.Write(data)
+}
+
+const (
+	maxResizeSourceDimension = 8192
+	maxResizeSourcePixels    = 16 * 1024 * 1024
+)
+
+func smallestOversizedIcon(icons []besticon.Icon, sizeRange besticon.SizeRange) *besticon.Icon {
+	var selected *besticon.Icon
+	var selectedPixels int64
+
+	for i := range icons {
+		icon := &icons[i]
+		if icon.Format == "svg" || icon.Width <= 0 || icon.Height <= 0 {
+			continue
+		}
+		if icon.Width <= sizeRange.Max && icon.Height <= sizeRange.Max {
+			continue
+		}
+		if !safeResizeSource(icon.Width, icon.Height) {
+			continue
+		}
+
+		width, height := scaledDimensions(icon.Width, icon.Height, sizeRange.Max)
+		if width < sizeRange.Min || height < sizeRange.Min {
+			continue
+		}
+
+		pixels := int64(icon.Width) * int64(icon.Height)
+		if selected == nil || pixels < selectedPixels || (pixels == selectedPixels && icon.Bytes < selected.Bytes) {
+			selected = icon
+			selectedPixels = pixels
+		}
+	}
+
+	return selected
+}
+
+func (s *server) returnResizedIcon(w http.ResponseWriter, icon *besticon.Icon, maxSize int) bool {
+	data, resized, err := resizeIconData(icon, maxSize)
+	if err != nil || !resized {
+		return false
+	}
+
+	addCacheControl(w, s.cacheDuration)
+	w.Header().Set(contentType, imagePNG)
+	_, _ = w.Write(data)
+	return true
+}
+
+func resizeIconData(icon *besticon.Icon, maxSize int) ([]byte, bool, error) {
+	if icon.Width <= maxSize && icon.Height <= maxSize {
+		return icon.ImageData, false, nil
+	}
+	if icon.Width <= 0 || icon.Height <= 0 || maxSize <= 0 {
+		return nil, false, errors.New("invalid icon dimensions")
+	}
+	if !safeResizeSource(icon.Width, icon.Height) {
+		return nil, false, errors.New("icon is too large to resize safely")
+	}
+
+	source, _, err := image.Decode(bytes.NewReader(icon.ImageData))
+	if err != nil {
+		return nil, false, err
+	}
+
+	width, height := scaledDimensions(icon.Width, icon.Height, maxSize)
+	destination := image.NewNRGBA(image.Rect(0, 0, width, height))
+	xdraw.CatmullRom.Scale(destination, destination.Bounds(), source, source.Bounds(), draw.Src, nil)
+
+	var output bytes.Buffer
+	encoder := png.Encoder{CompressionLevel: png.DefaultCompression}
+	if err := encoder.Encode(&output, destination); err != nil {
+		return nil, false, err
+	}
+
+	return output.Bytes(), true, nil
+}
+
+func safeResizeSource(width, height int) bool {
+	return width > 0 && height > 0 &&
+		width <= maxResizeSourceDimension && height <= maxResizeSourceDimension &&
+		int64(width)*int64(height) <= maxResizeSourcePixels
+}
+
+func scaledDimensions(width, height, maxSize int) (int, int) {
+	if width >= height {
+		return maxSize, max(1, height*maxSize/width)
+	}
+	return max(1, width*maxSize/height), maxSize
 }
 
 func (s *server) returnLetterIcon(w http.ResponseWriter, r *http.Request, iconPath string) {
