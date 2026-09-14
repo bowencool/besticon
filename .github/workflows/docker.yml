@@ -2,10 +2,9 @@ name: Docker
 
 on:
   push:
-    branches: [master]
-    paths-ignore:
-      - Readme.markdown
-  workflow_dispatch:
+    branches:
+      - master
+  workflow_dispatch: {}
 
 permissions:
   contents: read
